@@ -12,6 +12,27 @@ require Pathname(__FILE__).dirname + "block_io"
 module Wheels
   class Application
 
+    class InvalidCSRFToken < Exception; end
+
+    ##
+    # Setter for anti-CSRF token to be used by form helper, and
+    # verified when requests are parsed.
+    ##
+    def self.csrf_token=(token)
+      @@csrf_token = token
+    end
+
+    ##
+    # Getter for anti-CSRF token. Defaults to MD5 digest of `uname -a`,
+    # i.e., a machine-specific non-guessable value.
+    ##
+    def self.csrf_token
+      @@csrf_token
+    rescue NameError
+      require 'digest/md5'
+      Digest::MD5.hexdigest(`uname -a`.chomp)
+    end
+
     def self.services=(container)
       @services = container
     end
@@ -43,17 +64,21 @@ module Wheels
       env["APP_ENVIRONMENT"] = environment
       request = Request.new(self, env)
       response = Response.new(request)
-      
+
+      if request.request_method != "GET" && request.csrf_token != self.class.csrf_token
+        raise InvalidCSRFToken.new("CSRF token (#{request.csrf_token.inspect}) does not match Wheels::Application.csrf_token (#{self.class.csrf_token.inspect})")
+      end
+
       handler = @router.match(request)
       return not_found(request, response) if handler == false
-      
+
       catch(:abort_request) do
         dispatch_request(handler, request, response)
       end
-      
+
       [response.status, response.headers, response.buffer]
     end
-    
+
     def dispatch_request(handler, request, response)
       handler.call(request, response)
     end

@@ -30,6 +30,10 @@ module Wheels
       @env['APP_ENVIRONMENT'] || (@application ? @application.environment : "development")
     end
 
+    def csrf_token
+      self.POST ? self.POST['_csrf_token'] : nil
+    end
+
     private
     def request_method_in_params?
       @env["REQUEST_METHOD"] == "POST" && self.POST && %w(PUT DELETE).include?((self.POST['_method'] || "").upcase)
